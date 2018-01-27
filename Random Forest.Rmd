@@ -1,0 +1,108 @@
+---
+title: "Kaggle Titanic Random Forest"
+author: "SANDIPAN PAUL"
+date: "17 November 2017"
+output: html_document
+---
+
+```{r}
+#string as factor done because we want to do some manipulation and for that we don't want group.
+# header = TRUE is be default in read.csv() but it is a good practise to write
+
+titanic.train <- read.csv("file:///D:/College/Kaggle/Titanic/Dataset/train.csv", header = TRUE, stringsAsFactors = FALSE)
+titanic.test<- read.csv("file:///D:/College/Kaggle/Titanic/Dataset/test.csv", header = TRUE, stringsAsFactors = FALSE)
+
+#Line 40 we will again change it to factor
+
+#Now we will merge two datasets . So we need survivor column in test data and to differentiate which data is from train and test we will addup new column
+titanic.train$IsTrainSet <- TRUE
+titanic.test$IsTrainSet <- FALSE
+titanic.test$Survived <- NA
+
+#Now combine two dataset
+titanic.full <- rbind(titanic.train,titanic.test)
+
+str(titanic.full) 
+
+#Now we will check for na values
+table(titanic.full$Embarked)  # by the output we will find that it have blank space - "" , so we will replace S
+titanic.full[titanic.full$Embarked== "", "Embarked"] <- "S"
+table(titanic.full$Embarked) # "" values will be merged into S
+
+table(is.na(titanic.full$Age)) #Missing values showed by TRUE
+#age.median <- median(titanic.full$Age, na.rm = TRUE)
+titanic.full[is.na(titanic.full$Age), "Age"] = 70
+table(is.na(titanic.full$Age))
+
+# table(is.na(titanic.full$Fare)) #Missing values showed by TRUE
+# fare.median <- median(titanic.full$Fare, na.rm = TRUE)
+# titanic.full[is.na(titanic.full$Fare), "Fare"] = fare.median
+# table(is.na(titanic.full$Fare))
+
+#We will build linaer model or regression model for Fare and boxplot it and remove the outlier
+boxplot(titanic.full$Fare)
+boxplot.stats(titanic.full$Fare)
+#So the highest value is 65 . We can use that value directly
+upper.whisker<-boxplot.stats(titanic.full$Fare)$stats[5]
+outlier.filter <-titanic.full$Fare < upper.whisker
+titanic.full[outlier.filter,]
+
+#We will build linear model or regression model for Age and boxplot it and remove the outlier
+boxplot(titanic.full$Age, na.rm = TRUE)
+boxplot.stats(titanic.full$Age)
+#SO the highest value is 66 . We can use it directly
+upper.whisker.age<- boxplot.stats(titanic.full$Age)$stats[5]
+outlier.filter.age<-titanic.full$Age< upper.whisker.age
+titanic.full[outlier.filter,]
+
+
+#build linear model
+fare.equation = "Fare ~ Pclass+Sex+Age+SibSp+Parch+Embarked"
+fare.model<-lm(
+  formula = fare.equation,
+  data = titanic.full[outlier.filter,]
+)
+
+
+fare.row <- titanic.full[is.na(titanic.full$Fare),c("Pclass","Sex","Age","SibSp","Parch","Embarked")]
+
+fare.prediction<-predict(fare.model,fare.row)
+titanic.full[is.na(titanic.full$Fare),"Fare"] <- fare.prediction
+
+#Categorical casting except survived because there are 3 values in survived 0,1,NA so if we loose NA we will loose many data and only train data have NA values and test data dont have Survived column
+titanic.full$Pclass<-as.factor(titanic.full$Pclass)
+titanic.full$Sex<-as.factor(titanic.full$Sex)
+titanic.full$Embarked<-as.factor(titanic.full$Embarked)
+
+#Update the value in Train dataset and Test dataset
+titanic.train<-titanic.full[titanic.full$IsTrainSet== TRUE,]
+titanic.test<-titanic.full[titanic.full$IsTrainSet== FALSE,]
+
+str(titanic.train)
+
+titanic.train$Survived <- as.factor(titanic.train$Survived)
+
+str(titanic.train)
+
+survived.equation = "Survived ~ Pclass+Sex+Age+SibSp+Parch+Fare+Embarked"
+survived.formula = as.formula(survived.equation)
+
+#Build random forest model
+library(randomForest)
+
+
+
+titanic.model <- randomForest(formula = survived.formula, data = titanic.train, ntree =500 , mtry = 3, nodesize = 0.01*nrow(titanic.test))
+
+feature.equation = "Pclass+Sex+Age+SibSp+Parch+Fare+Embarked"
+
+Survived<-predict(titanic.model, newdata = titanic.test)
+PassengerId <-titanic.test$PassengerId
+output.df<- as.data.frame(PassengerId)
+output.df$Survived <- Survived
+tail(output.df)
+write.csv(output.df, "file:///D:/College/Kaggle/Titanic/Submission/2Submission3RandomForest.csv", row.names = FALSE)
+```
+
+
+Your submission scored 0.78947 Survived ~ Pclass+Sex+Age+SibSp+Parch+Fare+Embarked
